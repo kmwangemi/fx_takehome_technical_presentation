@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     )
     # Database
     DATABASE_URL: str
+    SYNC_DATABASE_URL: str
     # Rates API
     EXCHANGE_RATES_API_KEY: str = ""
     EXCHANGE_RATES_API_URL: str = "https://api.exchangeratesapi.io/v1/latest"
@@ -20,6 +21,8 @@ class Settings(BaseSettings):
     # App
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+    PROJECT_NAME: str = "FX Engine System API"
+    VERSION: str = "1.0.0"
 
 
 settings = Settings()  # type: ignore[call-arg]
