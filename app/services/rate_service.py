@@ -33,7 +33,10 @@ async def fetch_and_store_rates(db: AsyncSession) -> None:
         ) as client:
             resp = await client.get(
                 settings.EXCHANGE_RATES_API_URL,
-                params={"access_key": settings.EXCHANGE_RATES_API_KEY, "base": "USD"},
+                params={
+                    "access_key": settings.EXCHANGE_RATES_API_KEY,
+                    "symbols": ",".join([c.value for c in Currency])
+                },
             )
             resp.raise_for_status()
             data = resp.json()
@@ -44,14 +47,15 @@ async def fetch_and_store_rates(db: AsyncSession) -> None:
             )
             return
         fetched_at = datetime.now(UTC)
-        # Build a {currency: Decimal} map of USD-based rates
-        usd_rates: dict[str, Decimal] = {k: Decimal(str(v)) for k, v in rates_raw.items()}
-        usd_rates["USD"] = Decimal("1")
+        # Build a {currency: Decimal} map of rates relative to the API's base currency
+        base_ccy = data.get("base", "USD")
+        base_rates: dict[str, Decimal] = {k: Decimal(str(v)) for k, v in rates_raw.items()}
+        base_rates[base_ccy] = Decimal("1")
         # Derive all supported pair rates and persist
         records = []
         for from_ccy, to_ccy in SUPPORTED_PAIRS:
             try:
-                mid = _derive_rate(usd_rates, from_ccy, to_ccy)
+                mid = _derive_rate(base_rates, from_ccy, to_ccy)
             except KeyError:
                 logger.warning(
                     "rate_fetch.missing_pair",
@@ -79,10 +83,10 @@ async def fetch_and_store_rates(db: AsyncSession) -> None:
 
 
 def _derive_rate(
-    usd_rates: dict[str, Decimal], from_ccy: Currency, to_ccy: Currency
+    base_rates: dict[str, Decimal], from_ccy: Currency, to_ccy: Currency
 ) -> Decimal:
-    """Cross via USD: rate(A→B) = rate(USD→B) / rate(USD→A)."""
-    return usd_rates[to_ccy] / usd_rates[from_ccy]
+    """Cross via Base: rate(A→B) = rate(Base→B) / rate(Base→A)."""
+    return base_rates[to_ccy.value] / base_rates[from_ccy.value]
 
 
 async def get_latest_rate(
