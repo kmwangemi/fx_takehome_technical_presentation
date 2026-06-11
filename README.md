@@ -9,8 +9,6 @@ Full-featured backend for the MikroTik Hotspot ISP Management Platform.
 - **Alembic** — database migrations
 - **Neon (PostgreSQL)** — database
 - **asyncpg** — async PostgreSQL driver
-- **python-jose** — JWT tokens (access + refresh)
-- **passlib[bcrypt]** — password hashing
 - **uv** — package manager
 
 ---
@@ -89,17 +87,11 @@ Then install the project dependencies:
 uv sync
 ```
 
-### 3. Configure environment
+### 2. Configure environment
 
 ```bash
 cp .env.example .env
-# Edit .env with your Neon database URL, JWT secrets, SMTP credentials
-```
-
-Generate a secure `SECRET_KEY`:
-
-```bash
-uv run python -c "import secrets; print(secrets.token_hex(32))"
+# Edit .env with your Neon database URL, secrets
 ```
 
 Your Neon `.env` URLs look like:
@@ -111,7 +103,7 @@ DATABASE_URL=postgresql+asyncpg://user:pass@ep-xxx.neon.tech/dbname?sslmode=requ
 ### 3. Create the PostgreSQL database in Neon SQL editor
 
 ```bash
-CREATE DATABASE mikrotik_hotspot_manager;
+CREATE DATABASE fx_engine_system;
 ```
 
 ### 4. Run migrations
@@ -120,14 +112,7 @@ CREATE DATABASE mikrotik_hotspot_manager;
 alembic upgrade head
 ```
 
-### 5. Seed superadmin
-
-```bash
-uv run python -m scripts.seed
-# Default: admin@mikrotik.local / Admin@1234!
-```
-
-### 6. Run server
+### 5. Run server
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -135,41 +120,6 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 API docs: http://localhost:8000/api/docs
 
----
-
-## Auth Flow
-
-| Endpoint                            | Description                                 |
-| ----------------------------------- | ------------------------------------------- |
-| `POST /api/v1/auth/login`           | Login → returns access + refresh tokens     |
-| `POST /api/v1/auth/refresh`         | Exchange refresh token for new access token |
-| `POST /api/v1/auth/logout`          | Revoke refresh token                        |
-| `POST /api/v1/auth/logout-all`      | Revoke all sessions                         |
-| `POST /api/v1/auth/send-otp`        | Send email OTP                              |
-| `POST /api/v1/auth/verify-otp`      | Verify OTP code                             |
-| `POST /api/v1/auth/change-password` | Change password (authenticated)             |
-| `GET /api/v1/auth/me`               | Get current user                            |
-
----
-
-## Roles & Permissions
-
-### SuperAdmin
-
-- Manage/view all vendors
-- Manage all users
-- View & export all activity logs
-- View all routers
-- Manage system settings
-
-### Vendor
-
-- Manage own routers (CRUD)
-- View own analytics
-- Manage own hotspot users
-- Manage own profile
-
----
 
 ## API Endpoints Summary
 
@@ -267,7 +217,7 @@ uv run alembic init alembic
 In `alembic/env.py`, ensure the following is configured:
 
 ```python
-from core.database import Base
+from app.db.base_class import Base
 import app.models  # noqa: F401 — registers models
 target_metadata = Base.metadata
 ```
