@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,8 +23,13 @@ class Settings(BaseSettings):
     # App
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
-    PROJECT_NAME: str = "FX Engine System API"
-    VERSION: str = "1.0.0"
+    APP_NAME: str = "FX Engine System API"
+    APP_VERSION: str = "1.0.0"
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
+
+    @property
+    def allowed_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
 
 
 settings = Settings()  # type: ignore[call-arg]
