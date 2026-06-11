@@ -61,58 +61,66 @@ async def execute_quote(
     now = datetime.now(UTC)
     if quote.expires_at.replace(tzinfo=UTC) < now:
         raise QuoteExpired(quote_id)
-    # --- Main atomic transaction --------------------------------------------
-    async with db.begin():
-        # 1. Conditional status transition (concurrency gate)
-        result = await db.execute(
-            update(Quote)
-            .where(Quote.id == quote_id, Quote.status == QuoteStatus.PENDING)
-            .values(status=QuoteStatus.EXECUTED)
-        )
-        if result.rowcount == 0:
-            # Somebody else won the race or quote already executed/failed
-            refreshed = await db.get(Quote, quote_id)
-            if refreshed and refreshed.status == QuoteStatus.EXECUTED:
-                raise QuoteAlreadyExecuted(quote_id)
-            raise QuoteAlreadyExecuted(quote_id)
-        # 2. Lock balance rows (FOR UPDATE)
-        from_balance = await _get_balance_for_update(
-            db, customer_id, quote.from_currency
-        )
-        to_balance = await _get_balance_for_update(db, customer_id, quote.to_currency)
-        # 3. Sufficient funds check
-        if from_balance.amount_minor < quote.from_amount_minor:
-            # Mark quote as failed (terminal — do not silently retry)
-            await db.execute(
+    # Commit implicit read transaction so we can start an explicit transaction
+    await db.commit()
+    try:
+        # --- Main atomic transaction --------------------------------------------
+        async with db.begin():
+            # 1. Conditional status transition (concurrency gate)
+            result = await db.execute(
                 update(Quote)
-                .where(Quote.id == quote_id)
-                .values(status=QuoteStatus.FAILED)
+                .where(Quote.id == quote_id, Quote.status == QuoteStatus.PENDING)
+                .values(status=QuoteStatus.EXECUTED)
             )
-            raise InsufficientFunds(
-                quote.from_currency,
-                from_balance.amount_minor,
-                quote.from_amount_minor,
+            if result.rowcount == 0:
+                # Somebody else won the race or quote already executed/failed
+                refreshed = await db.get(Quote, quote_id)
+                if refreshed and refreshed.status == QuoteStatus.EXECUTED:
+                    raise QuoteAlreadyExecuted(quote_id)
+                raise QuoteAlreadyExecuted(quote_id)
+            # 2. Lock balance rows (FOR UPDATE)
+            from_balance = await _get_balance_for_update(
+                db, customer_id, quote.from_currency
             )
-        # 4. Apply balance changes
-        from_balance.amount_minor -= quote.from_amount_minor
-        to_balance.amount_minor += quote.to_amount_minor
-        # 5. Execution record
-        execution = Execution(
-            quote_id=quote_id,
-            customer_id=customer_id,
-            correlation_id=quote.correlation_id,
+            to_balance = await _get_balance_for_update(db, customer_id, quote.to_currency)
+            # 3. Sufficient funds check
+            if from_balance.amount_minor < quote.from_amount_minor:
+                raise InsufficientFunds(
+                    quote.from_currency,
+                    from_balance.amount_minor,
+                    quote.from_amount_minor,
+                )
+            # 4. Apply balance changes
+            from_balance.amount_minor -= quote.from_amount_minor
+            to_balance.amount_minor += quote.to_amount_minor
+            # 5. Execution record
+            execution = Execution(
+                quote_id=quote_id,
+                customer_id=customer_id,
+                correlation_id=quote.correlation_id,
+            )
+            db.add(execution)
+            await db.flush()
+            # 6. Idempotency record (committed in same txn)
+            response_payload = _build_response(quote, execution)
+            idempotency_record = IdempotencyRecord(
+                customer_id=customer_id,
+                idempotency_key=idempotency_key,
+                response_status=200,
+                response_body=json.dumps(response_payload),
+            )
+            db.add(idempotency_record)
+            # db.begin() context manager commits on exit
+    except InsufficientFunds:
+        # Mark quote as failed (terminal — do not silently retry) after rollback
+        await db.execute(
+            update(Quote)
+            .where(Quote.id == quote_id)
+            .values(status=QuoteStatus.FAILED)
         )
-        db.add(execution)
-        # 6. Idempotency record (committed in same txn)
-        response_payload = _build_response(quote, execution)
-        idempotency_record = IdempotencyRecord(
-            customer_id=customer_id,
-            idempotency_key=idempotency_key,
-            response_status=200,
-            response_body=json.dumps(response_payload),
-        )
-        db.add(idempotency_record)
-        # db.begin() context manager commits on exit
+        await db.commit()
+        raise
+
     logger.info(
         "execute.success",
         quote_id=quote_id,

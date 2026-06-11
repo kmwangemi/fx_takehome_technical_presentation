@@ -39,7 +39,7 @@ async def create_quote(
     """
     if (from_currency, to_currency) not in SUPPORTED_PAIRS:
         raise UnsupportedPair(from_currency, to_currency)
-    spread_bps = settings.default_spread_bps
+    spread_bps = settings.DEFAULT_SPREAD_BPS
     if (from_currency, to_currency) in CROSS_PAIRS_VIA_USD:
         # Two-leg: A → USD → B
         mid_a_to_usd, age1 = await get_latest_rate(db, from_currency, Currency.USD)
@@ -66,7 +66,7 @@ async def create_quote(
         rate_age_seconds=rate_age_seconds,
         correlation_id=str(uuid.uuid4()),
         created_at=now,
-        expires_at=now + timedelta(seconds=settings.quote_ttl_seconds),
+        expires_at=now + timedelta(seconds=settings.QUOTE_TTL_SECONDS),
     )
     db.add(quote)
     await db.commit()
