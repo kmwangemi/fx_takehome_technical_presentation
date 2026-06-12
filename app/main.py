@@ -6,15 +6,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
+from app.core.logging import logger
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"[STARTUP] {settings.APP_NAME} v{settings.APP_VERSION} starting...")
+    logger.info("startup", app_name=settings.APP_NAME, version=settings.APP_VERSION)
     start_scheduler()
     yield
     stop_scheduler()
-    print(f"[SHUTDOWN] {settings.APP_NAME} shut down")
+    logger.info("shutdown", app_name=settings.APP_NAME)
 
 
 app = FastAPI(
@@ -50,3 +51,10 @@ async def root():
 @app.get("/healthz", tags=["Health"])
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/metrics", tags=["Observability"])
+async def metrics():
+    from fastapi import Response
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

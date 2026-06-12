@@ -95,8 +95,27 @@ uv run pytest -v
 - `POST /api/v1/executions` — Execute an FX transaction using a quote ID and idempotency key
 
 ### Observability
-- `GET /healthz` — Health check
-- `GET /metrics` — Prometheus metrics (or structured logs)
+
+- **Health Checks**: `GET /healthz` — Basic health check endpoint.
+- **Metrics**: `GET /metrics` — Prometheus metrics tracking quote generations, execution latencies, and rate staleness.
+- **Structured Logging**: The application uses `structlog` for JSON-formatted logs.
+- **Correlation IDs**: Every quote generates a `correlation_id` which is carried forward into the execution phase, allowing distributed tracing of a single customer's transaction flow from quote to execution.
+
+**Example Structured Log Output**:
+```json
+{
+  "event": "execute.success",
+  "quote_id": "550e8400-e29b-41d4-a716-446655440000",
+  "customer_id": "cust_12345",
+  "correlation_id": "8755b76b-967f-4318-874e-030a5fb291fc",
+  "from_currency": "USD",
+  "to_currency": "KES",
+  "from_amount_minor": 10000,
+  "to_amount_minor": 1300000,
+  "level": "info",
+  "timestamp": "2026-06-12T03:55:00.000Z"
+}
+```
 
 ---
 
