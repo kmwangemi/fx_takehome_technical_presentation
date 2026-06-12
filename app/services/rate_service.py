@@ -73,12 +73,20 @@ async def fetch_and_store_rates(db: AsyncSession) -> None:
             )
         db.add_all(records)
         await db.commit()
+        from app.core.metrics import rate_fetch_total
+        rate_fetch_total.labels(status="success").inc()
         logger.info("rate_fetch.success", num_pairs=len(records), fetched_at=fetched_at.isoformat())
     except httpx.TimeoutException:
+        from app.core.metrics import rate_fetch_total
+        rate_fetch_total.labels(status="timeout").inc()
         logger.warning("rate_fetch.timeout", url=settings.EXCHANGE_RATES_API_URL)
     except httpx.HTTPStatusError as exc:
+        from app.core.metrics import rate_fetch_total
+        rate_fetch_total.labels(status="failure").inc()
         logger.error("rate_fetch.http_error", status=exc.response.status_code)
     except Exception as exc:  # noqa: BLE001
+        from app.core.metrics import rate_fetch_total
+        rate_fetch_total.labels(status="failure").inc()
         logger.error("rate_fetch.unexpected_error", error=str(exc))
 
 
@@ -110,6 +118,8 @@ async def get_latest_rate(
     if row is None:
         raise RatesUnavailable("No rate data available for pair")
     age_seconds = int((datetime.now(UTC) - row.fetched_at.replace(tzinfo=UTC)).total_seconds())
+    from app.core.metrics import rate_staleness_seconds
+    rate_staleness_seconds.set(age_seconds)
     if age_seconds > settings.MAX_RATE_STALENESS_SECONDS:
         raise RatesUnavailable(
             f"Cached rate is {age_seconds}s old (threshold: {settings.MAX_RATE_STALENESS_SECONDS}s)"

@@ -28,6 +28,28 @@ from app.utils.exceptions import (
 )
 
 
+from functools import wraps
+import time
+from app.core.metrics import executions_total, execution_latency_seconds
+
+def track_execution_metrics(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        start_time = time.time()
+        try:
+            result = await func(*args, **kwargs)
+            executions_total.labels(status="success", error_code="").inc()
+            return result
+        except Exception as e:
+            error_code = type(e).__name__
+            executions_total.labels(status="failure", error_code=error_code).inc()
+            raise
+        finally:
+            execution_latency_seconds.observe(time.time() - start_time)
+    return wrapper
+
+
+@track_execution_metrics
 async def execute_quote(
     db: AsyncSession,
     quote_id: str,

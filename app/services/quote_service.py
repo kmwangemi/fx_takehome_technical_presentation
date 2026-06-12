@@ -71,4 +71,11 @@ async def create_quote(
     db.add(quote)
     await db.commit()
     await db.refresh(quote)
+    
+    from app.core.metrics import quotes_created_total
+    quotes_created_total.labels(
+        from_currency=from_currency.value, 
+        to_currency=to_currency.value
+    ).inc()
+    
     return quote
