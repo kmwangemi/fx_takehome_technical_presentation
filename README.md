@@ -27,19 +27,38 @@ uv sync
 
 ### 2. Configure environment
 
-Make sure your `.env` contains the `DATABASE_URL` pointing to your PostgreSQL instance, as well as any other necessary configuration settings.
-```
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/fx_engine
+This project uses [Neon](https://neon.tech/) as the PostgreSQL database provider. You can quickly set up a free serverless Postgres database on Neon.
+
+Make sure your `.env` contains the following environment variables. You can copy these examples and replace them with your actual values:
+
+```env
+# Database (Neon PostgreSQL examples)
+# Note: SYNC_DATABASE_URL is used specifically by Alembic for synchronous database migrations (see alembic/env.py)
+DATABASE_URL="postgresql+asyncpg://user:password@ep-example-host.aws.neon.tech/dbname?ssl=require"
+SYNC_DATABASE_URL="postgresql+psycopg2://user:password@ep-example-host.aws.neon.tech/dbname?sslmode=require"
+
+# App
+APP_ENV="development"
+APP_NAME="FX Engine System API"
+APP_VERSION="1.0.0"
+
+# Rates API
+EXCHANGE_RATES_API_KEY="your_api_key_here"
+EXCHANGE_RATES_API_URL="https://api.exchangeratesapi.io/v1/latest"
+
+# Spread & rates config
+DEFAULT_SPREAD_BPS=50
+RATE_POLL_INTERVAL_SECONDS=3600
+MAX_RATE_STALENESS_SECONDS=7200
+RATE_FETCH_TIMEOUT_SECONDS=5
+
+# Quote TTL
+QUOTE_TTL_SECONDS=60
 ```
 
 ### 3. Setup Database
 
-Create the database in your PostgreSQL instance:
-```sql
-CREATE DATABASE fx_engine;
-```
-
-Run Alembic migrations to set up the schema:
+Once your Neon database is created and your `.env` is configured with the correct connection strings, run Alembic migrations to set up the schema:
 ```bash
 uv run alembic upgrade head
 ```
